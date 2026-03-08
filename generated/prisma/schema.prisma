@@ -1,0 +1,165 @@
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum SyncStatus {
+  IDLE
+  SYNCING
+  SUCCESS
+  FAILED
+}
+
+model User {
+  id String @id @default(cuid())
+
+  /// public identity in your app
+  stageName String @unique
+
+  /// github username
+  username String  @unique
+  githubId String? @unique
+
+  name      String?
+  email     String? @unique
+  avatarUrl String?
+
+  description String?
+
+  isPublic Boolean @default(true)
+
+  /// sync metadata
+  lastSyncedAt  DateTime?
+  syncStatus    SyncStatus @default(IDLE)
+  syncLockUntil DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  accounts Account[]
+  sessions Session[]
+
+  repos       Repo[]
+  socialLinks SocialLink[]
+  syncJobs    SyncJob[]
+
+  @@index([stageName])
+  @@index([createdAt])
+}
+
+model Account {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  provider          String
+  providerAccountId String
+
+  accessToken  String?
+  refreshToken String?
+  expiresAt    Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([provider, providerAccountId])
+  @@index([userId])
+}
+
+model Session {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  sessionToken String   @unique
+  expires      DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+}
+
+model Verification {
+  id String @id @default(cuid())
+
+  identifier String
+  value      String
+  expiresAt  DateTime
+
+  createdAt DateTime @default(now())
+}
+
+model Repo {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  githubRepoId Int @unique
+
+  name        String
+  htmlUrl     String
+  description String?
+
+  stars    Int     @default(0)
+  forks    Int     @default(0)
+  language String?
+
+  isPrivate     Boolean @default(false)
+  defaultBranch String?
+
+  createdAt DateTime
+  pushedAt  DateTime?
+
+  cachedAt  DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([language])
+  @@index([stars])
+}
+
+model SocialLink {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  platform String
+  url      String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, platform])
+  @@index([userId])
+}
+
+model SyncJob {
+  id String @id @default(cuid())
+
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  status SyncStatus @default(IDLE)
+
+  attempt Int @default(0)
+
+  startedAt  DateTime?
+  finishedAt DateTime?
+
+  error String?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+}
