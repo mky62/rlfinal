@@ -1,9 +1,28 @@
-import 'dotenv/config'
-import { PrismaClient } from '@/generated/prisma'
-import { PrismaNeon } from '@prisma/adapter-neon'
+// lib/prisma.ts
+import { PrismaClient } from "@/generated/prisma";
 
-const adapter = new PrismaNeon({
-  connectionString: process.env.DATABASE_URL!,
-})
+const globalForPrisma = global as unknown as { prisma: PrismaClient };
 
-export const prisma = new PrismaClient({ adapter })
+const client = new PrismaClient({ log: ["error"] });
+
+// Intercept User creates — inject username/stageName from name if missing
+client.$use(async (params, next) => {
+  if (params.model === "User" && params.action === "create") {
+    const data = params.args.data;
+
+    if (!data.username) {
+      // Use githubId as fallback to guarantee uniqueness
+      data.username = data.name?.toLowerCase().replace(/\s+/g, "_")
+        ?? `user_${Date.now()}`;
+    }
+
+    if (!data.stageName) {
+      data.stageName = data.username;
+    }
+  }
+  return next(params);
+});
+
+export const prisma = globalForPrisma.prisma ?? client;
+
+if (process.env.NODE_ENV !== "production") globalForPrisma.prisma = prisma;

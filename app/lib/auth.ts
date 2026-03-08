@@ -1,14 +1,10 @@
+// lib/auth.ts
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
-import { PrismaClient } from "@/generated/prisma";
-
-const prisma = new PrismaClient();
-let _pendingProfile: Record<string, any> | null = null;
+import { prisma } from "./db";
 
 export const auth = betterAuth({
-  database: prismaAdapter(prisma, {
-    provider: "postgresql",
-  }),
+  database: prismaAdapter(prisma, { provider: "postgresql" }),
 
   socialProviders: {
     github: {
@@ -28,11 +24,17 @@ export const auth = betterAuth({
           user: {
             id: String(profile.id),
             name: profile.name ?? profile.login,
-            email: profile.email ?? undefined,
+            email: profile.email ?? `${profile.login}@github.noemail`,  // ← email can't be null
             image: profile.avatar_url,
-            emailVerified: false,          // ← required by BA's type
+            emailVerified: false,
           },
-          data: profile,
+          data: {
+            ...profile,
+            // Pass these through data so hooks can read them
+            _username: profile.login,
+            _stageName: profile.login,
+            _githubId: String(profile.id),
+          },
         };
       },
     },
@@ -58,30 +60,11 @@ export const auth = betterAuth({
     },
   },
 
-  databaseHooks: {
-    user: {
-      create: {
-        before: async (user) => {
-          const profile = _pendingProfile;
-          _pendingProfile = null; // clear after use
-
-          return {
-            data: {
-              ...user,
-              username: profile?.login ?? undefined,
-              stageName: profile?.login ?? undefined,
-              githubId: profile?.id ? String(profile.id) : undefined,
-            },
-          };
-        },
-      },
-    },
-  },
-
   session: {
     modelName: "Session",
     fields: {
       token: "sessionToken",
+      expiresAt: "expires",
     },
     expiresIn: 60 * 60 * 24 * 7,
     updateAge: 60 * 60 * 24,
